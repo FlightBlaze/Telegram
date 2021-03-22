@@ -47,6 +47,8 @@ import org.telegram.messenger.UserObject;
 import org.telegram.tgnet.TLRPC;
 import org.telegram.ui.ActionBar.Theme;
 
+import java.util.ArrayList;
+
 @SuppressWarnings("FieldCanBeLocal")
 public class UndoView extends FrameLayout {
 
@@ -73,7 +75,7 @@ public class UndoView extends FrameLayout {
     private int textWidth;
 
     private int currentAction;
-    private long currentDialogId;
+    private ArrayList<Long> currentDialogIds;
     private Runnable currentActionRunnable;
     private Runnable currentCancelRunnable;
 
@@ -318,8 +320,10 @@ public class UndoView extends FrameLayout {
             currentCancelRunnable = null;
         }
         if (currentAction == ACTION_CLEAR || currentAction == ACTION_DELETE) {
-            MessagesController.getInstance(currentAccount).removeDialogAction(currentDialogId, currentAction == ACTION_CLEAR, apply);
-            onRemoveDialogAction(currentDialogId, currentAction);
+            for (int d = 0; d < currentDialogIds.size(); d++) {
+                MessagesController.getInstance(currentAccount).removeDialogAction(currentDialogIds.get(d), currentAction == ACTION_CLEAR, apply);
+                onRemoveDialogAction(currentDialogIds.get(d), currentAction);
+            }
         }
         if (animated != 0) {
             AnimatorSet animatorSet = new AnimatorSet();
@@ -362,6 +366,10 @@ public class UndoView extends FrameLayout {
         showWithAction(did, action, null, null, actionRunnable, null);
     }
 
+    public void showWithActions(ArrayList<Long> dids, int action, Runnable actionRunnable) {
+        showWithActions(dids, action, null, null, actionRunnable, null);
+    }
+
     public void showWithAction(long did, int action, Object infoObject) {
         showWithAction(did, action, infoObject, null, null, null);
     }
@@ -375,13 +383,20 @@ public class UndoView extends FrameLayout {
     }
 
     public void showWithAction(long did, int action, Object infoObject, Object infoObject2, Runnable actionRunnable, Runnable cancelRunnable) {
+        ArrayList<Long> dids = new ArrayList<Long>();
+        dids.add(did);
+        showWithActions(dids, action, infoObject, infoObject2, actionRunnable, cancelRunnable);
+    }
+
+    public void showWithActions(ArrayList<Long> dids, int action, Object infoObject, Object infoObject2, Runnable actionRunnable, Runnable cancelRunnable) {
+        long did = dids.get(0);
         if (currentActionRunnable != null) {
             currentActionRunnable.run();
         }
         isShown = true;
         currentActionRunnable = actionRunnable;
         currentCancelRunnable = cancelRunnable;
-        currentDialogId = did;
+        currentDialogIds = (ArrayList<Long>) dids.clone();
         currentAction = action;
         timeLeft = 5000;
         currentInfoObject = infoObject;
@@ -1128,19 +1143,25 @@ public class UndoView extends FrameLayout {
             if (currentAction == ACTION_CLEAR) {
                 infoTextView.setText(LocaleController.getString("HistoryClearedUndo", R.string.HistoryClearedUndo));
             } else {
-                int lowerId = (int) did;
-                if (lowerId < 0) {
-                    TLRPC.Chat chat = MessagesController.getInstance(currentAccount).getChat(-lowerId);
-                    if (ChatObject.isChannel(chat) && !chat.megagroup) {
-                        infoTextView.setText(LocaleController.getString("ChannelDeletedUndo", R.string.ChannelDeletedUndo));
+                if (dids.size() == 1) {
+                    int lowerId = (int) did;
+                    if (lowerId < 0) {
+                        TLRPC.Chat chat = MessagesController.getInstance(currentAccount).getChat(-lowerId);
+                        if (ChatObject.isChannel(chat) && !chat.megagroup) {
+                            infoTextView.setText(LocaleController.getString("ChannelDeletedUndo", R.string.ChannelDeletedUndo));
+                        } else {
+                            infoTextView.setText(LocaleController.getString("GroupDeletedUndo", R.string.GroupDeletedUndo));
+                        }
                     } else {
-                        infoTextView.setText(LocaleController.getString("GroupDeletedUndo", R.string.GroupDeletedUndo));
+                        infoTextView.setText(LocaleController.getString("ChatDeletedUndo", R.string.ChatDeletedUndo));
                     }
                 } else {
-                    infoTextView.setText(LocaleController.getString("ChatDeletedUndo", R.string.ChatDeletedUndo));
+                    infoTextView.setText(LocaleController.getString("ChatsDeletedUndo", R.string.ChatsDeletedUndo));
                 }
             }
-            MessagesController.getInstance(currentAccount).addDialogAction(did, currentAction == ACTION_CLEAR);
+            for (int d = 0; d < dids.size(); d++) {
+                MessagesController.getInstance(currentAccount).addDialogAction(dids.get(d), currentAction == ACTION_CLEAR);
+            }
         }
 
         AndroidUtilities.makeAccessibilityAnnouncement(infoTextView.getText() + (subinfoTextView.getVisibility() == VISIBLE ? ". " + subinfoTextView.getText() : ""));

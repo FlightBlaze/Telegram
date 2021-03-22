@@ -5169,6 +5169,7 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
             minPinnedNum -= canPinCount;
         }
         boolean scrollToTop = false;
+
         for (int a = 0; a < count; a++) {
             long selectedDialog = selectedDialogs.get(a);
             TLRPC.Dialog dialog = getMessagesController().dialogs_dict.get(selectedDialog);
@@ -5338,35 +5339,8 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
                         });
                     }
                     return;
-                } else {
-                    if (getMessagesController().isPromoDialog(selectedDialog, true)) {
-                        getMessagesController().hidePromoDialog();
-                    } else {
-                        if (action == clear && canClearCacheCount != 0) {
-                            getMessagesController().deleteDialog(selectedDialog, 2, false);
-                        } else {
-                            if (action == clear) {
-                                getMessagesController().deleteDialog(selectedDialog, 1, false);
-                            } else {
-                                if (chat != null) {
-                                    if (ChatObject.isNotInChat(chat)) {
-                                        getMessagesController().deleteDialog(selectedDialog, 0, false);
-                                    } else {
-                                        TLRPC.User currentUser = getMessagesController().getUser(getUserConfig().getClientUserId());
-                                        getMessagesController().deleteUserFromChat((int) -selectedDialog, currentUser, null);
-                                    }
-                                } else {
-                                    getMessagesController().deleteDialog(selectedDialog, 0, false);
-                                    if (isBot) {
-                                        getMessagesController().blockPeer((int) selectedDialog);
-                                    }
-                                }
-                                if (AndroidUtilities.isTablet()) {
-                                    getNotificationCenter().postNotificationName(NotificationCenter.closeChats, selectedDialog);
-                                }
-                            }
-                        }
-                    }
+                } else { // if count > 1
+
                 }
             } else if (action == mute) {
                 if (count == 1 && canMuteCount == 1) {
@@ -5386,7 +5360,72 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
                     }
                 }
             }
+        } // for (int a = 0; a < count; a++)
+
+        if (action == delete || action == clear) {
+            if (count > 1 && !alert) {
+                getUndoView().showWithActions(selectedDialogs, action == clear ? UndoView.ACTION_CLEAR : UndoView.ACTION_DELETE, () -> {
+                    for (int a = 0; a < count; a++) {
+                        long selectedDialog = selectedDialogs.get(a);
+                        TLRPC.Chat chat;
+                        TLRPC.User user = null;
+                        int lower_id = (int) selectedDialog;
+                        int high_id = (int) (selectedDialog >> 32);
+                        TLRPC.EncryptedChat encryptedChat = null;
+                        if (lower_id != 0) {
+                            if (lower_id > 0) {
+                                user = getMessagesController().getUser(lower_id);
+                                chat = null;
+                            } else {
+                                chat = getMessagesController().getChat(-lower_id);
+                            }
+                        } else {
+                            encryptedChat = getMessagesController().getEncryptedChat(high_id);
+                            chat = null;
+                            if (encryptedChat != null) {
+                                user = getMessagesController().getUser(encryptedChat.user_id);
+                            } else {
+                                user = new TLRPC.TL_userEmpty();
+                            }
+                        }
+                        if (chat == null && user == null) {
+                            continue;
+                        }
+                        boolean isBot = user != null && user.bot && !MessagesController.isSupportUser(user);
+
+                        if (getMessagesController().isPromoDialog(selectedDialog, true)) {
+                            getMessagesController().hidePromoDialog();
+                        } else {
+                            if (action == clear && canClearCacheCount != 0) {
+                                getMessagesController().deleteDialog(selectedDialog, 2, false);
+                            } else {
+                                if (action == clear) {
+                                    getMessagesController().deleteDialog(selectedDialog, 1, false);
+                                } else {
+                                    if (chat != null) {
+                                        if (ChatObject.isNotInChat(chat)) {
+                                            getMessagesController().deleteDialog(selectedDialog, 0, false);
+                                        } else {
+                                            TLRPC.User currentUser = getMessagesController().getUser(getUserConfig().getClientUserId());
+                                            getMessagesController().deleteUserFromChat((int) -selectedDialog, currentUser, null);
+                                        }
+                                    } else {
+                                        getMessagesController().deleteDialog(selectedDialog, 0, false);
+                                        if (isBot) {
+                                            getMessagesController().blockPeer((int) selectedDialog);
+                                        }
+                                    }
+                                    if (AndroidUtilities.isTablet()) {
+                                        getNotificationCenter().postNotificationName(NotificationCenter.closeChats, selectedDialog);
+                                    }
+                                }
+                            }
+                        }
+                    }
+                });
+            }
         }
+
         if (action == mute && !(count == 1 && canMuteCount == 1)) {
             BulletinFactory.createMuteBulletin(this, canUnmuteCount == 0).show();
         }
